@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verilog Calculator</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #202124;
+            font-family: Arial, sans-serif;
+        }
+
+        .calculator {
+            width: 320px;
+            padding: 20px;
+            background: #303134;
+            border-radius: 20px;
+            box-shadow: 0 8px 25px #00000055;
+        }
+
+        #display {
+            width: 100%;
+            height: 75px;
+            margin-bottom: 15px;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: #f1f3f4;
+            color: #202124;
+            text-align: right;
+            font-size: 30px;
+        }
+
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        button {
+            height: 58px;
+            border: none;
+            border-radius: 12px;
+            background: #5f6368;
+            color: white;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            filter: brightness(1.2);
+        }
+
+        .operator {
+            background: #f9ab00;
+            color: #202124;
+        }
+
+        .special {
+            background: #9aa0a6;
+            color: #202124;
+        }
+
+        .equals {
+            background: #34a853;
+            color: white;
+        }
+
+        #status {
+            min-height: 18px;
+            margin-top: 12px;
+            color: #ffffff;
+            font-size: 12px;
+            text-align: center;
+            overflow-wrap: anywhere;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="calculator">
+
+    <input id="display" type="text" value="0" readonly>
+
+    <div class="buttons">
+
+        <button class="special" data-action="clear">AC</button>
+        <button class="special" data-action="delete">DEL</button>
+        <button class="operator" data-value="%">%</button>
+        <button class="operator" data-value="/">÷</button>
+
+        <button data-value="7">7</button>
+        <button data-value="8">8</button>
+        <button data-value="9">9</button>
+        <button class="operator" data-value="*">×</button>
+
+        <button data-value="4">4</button>
+        <button data-value="5">5</button>
+        <button data-value="6">6</button>
+        <button class="operator" data-value="-">−</button>
+
+        <button data-value="1">1</button>
+        <button data-value="2">2</button>
+        <button data-value="3">3</button>
+        <button class="operator" data-value="+">+</button>
+
+        <button class="special" data-action="sign">+/-</button>
+        <button data-value="0">0</button>
+        <button data-action="decimal">.</button>
+        <button class="equals" data-action="equals">=</button>
+
+    </div>
+
+    <div id="status">Ready</div>
+
+</div>
+
+<script>
+    const display = document.getElementById("display");
+    const buttons = document.querySelector(".buttons");
+    const status = document.getElementById("status");
+
+    let currentInput = "0";
+    let firstNumber = null;
+    let operator = null;
+    let waitingForSecondNumber = false;
+
+    function updateDisplay() {
+        display.value = currentInput;
+    }
+
+    function clearCalculator() {
+        currentInput = "0";
+        firstNumber = null;
+        operator = null;
+        waitingForSecondNumber = false;
+        status.textContent = "Ready";
+        updateDisplay();
+    }
+
+    function enterNumber(value) {
+        if (waitingForSecondNumber) {
+            currentInput = value;
+            waitingForSecondNumber = false;
+        } else if (currentInput === "0") {
+            currentInput = value;
+        } else if (currentInput.length < 15) {
+            currentInput += value;
+        }
+
+        updateDisplay();
+    }
+
+    function enterDecimal() {
+        if (waitingForSecondNumber) {
+            currentInput = "0.";
+            waitingForSecondNumber = false;
+        } else if (!currentInput.includes(".")) {
+            currentInput += ".";
+        }
+
+        updateDisplay();
+    }
+
+    function chooseOperator(nextOperator) {
+        if (operator !== null && !waitingForSecondNumber) {
+            status.textContent = "Press = to finish the current calculation.";
+            return;
+        }
+
+        firstNumber = Number(currentInput);
+        operator = nextOperator;
+        waitingForSecondNumber = true;
+        status.textContent = "Enter the next number";
+    }
+
+    async function calculate() {
+        if (operator === null || firstNumber === null ||
+            waitingForSecondNumber) {
+            return;
+        }
+
+        const secondNumber = Number(currentInput);
+
+        if (operator === "/" && secondNumber === 0) {
+            currentInput = "Error";
+            updateDisplay();
+            status.textContent = "Cannot divide by zero";
+            firstNumber = null;
+            operator = null;
+            waitingForSecondNumber = false;
+            return;
+        }
+
+        if (operator === "%" && secondNumber === 0) {
+            currentInput = "Error";
+            updateDisplay();
+            status.textContent = "Cannot use modulo with zero";
+            firstNumber = null;
+            operator = null;
+            waitingForSecondNumber = false;
+            return;
+        }
+
+        status.textContent = "Calculating with Verilog...";
+
+        try {
+            const response = await fetch("http://127.0.0.1:8000/calculate", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    a: firstNumber,
+                    b: secondNumber,
+                    op: operator
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error("HTTP error " + response.status);
+            }
+
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            const result = data.result;
+
+            if (result === undefined || result === null ||
+                result === "") {
+                throw new Error("No result received from Verilog");
+            }
+
+            currentInput = String(result);
+            status.textContent = "Calculated by Verilog";
+        } catch (error) {
+            currentInput = "Error";
+            status.textContent =
+                "Bridge error: " + error.message;
+        }
+
+        updateDisplay();
+        firstNumber = null;
+        operator = null;
+        waitingForSecondNumber = false;
+    }
+
+    buttons.addEventListener("click", function(event) {
+        const button = event.target.closest("button");
+
+        if (!button) {
+            return;
+        }
+
+        const value = button.dataset.value;
+        const action = button.dataset.action;
+
+        if (action === "clear") {
+            clearCalculator();
+            return;
+        }
+
+        if (action === "delete") {
+            if (waitingForSecondNumber) {
+                return;
+            }
+
+            if (currentInput !== "Error") {
+                currentInput = currentInput.length > 1
+                    ? currentInput.slice(0, -1)
+                    : "0";
+
+                if (currentInput === "-") {
+                    currentInput = "0";
+                }
+            } else {
+                currentInput = "0";
+            }
+
+            updateDisplay();
+            status.textContent = "Ready";
+            return;
+        }
+
+        if (action === "decimal") {
+            if (currentInput === "Error") {
+                currentInput = "0";
+            }
+
+            enterDecimal();
+            return;
+        }
+
+        if (action === "sign") {
+            if (currentInput !== "0" && currentInput !== "Error") {
+                currentInput = String(-Number(currentInput));
+                updateDisplay();
+            }
+            return;
+        }
+
+        if (action === "equals") {
+            calculate();
+            return;
+        }
+
+        if (value === undefined) {
+            return;
+        }
+
+        if (/^\d$/.test(value)) {
+            if (currentInput === "Error") {
+                currentInput = "0";
+            }
+
+            enterNumber(value);
+            return;
+        }
+
+        if (value === ".") {
+            enterDecimal();
+            return;
+        }
+
+        if (["+", "-", "*", "/", "%"].includes(value)) {
+            if (currentInput === "Error") {
+                clearCalculator();
+            }
+
+            chooseOperator(value);
+        }
+    });
+
+    updateDisplay();
+</script>
+
+</body>
+</html>
